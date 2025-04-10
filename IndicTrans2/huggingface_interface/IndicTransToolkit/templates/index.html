@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Live Speaker Diarization & Transcript</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+  <style>
+    body {
+      background-color: #f0f2f5;
+      padding: 40px;
+      font-family: 'Segoe UI', sans-serif;
+    }
+
+    .container {
+      max-width: 800px;
+      margin: auto;
+      background: white;
+      padding: 30px;
+      border-radius: 20px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+    }
+
+    .btn {
+      margin: 10px 10px 10px 0;
+      min-width: 120px;
+    }
+
+    #transcript-box {
+      height: 300px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      background-color: #f8f9fa;
+      border: 1px solid #ccc;
+      border-radius: 10px;
+      padding: 15px;
+      font-family: monospace;
+    }
+
+    .title {
+      font-size: 1.8rem;
+      font-weight: bold;
+      margin-bottom: 20px;
+      color: #343a40;
+    }
+    .summary-style {
+      height: 300px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      background-color: #f8f9fa;
+      border: 1px solid #ccc;
+      border-radius: 10px;
+      padding: 15px;
+      font-family: monospace;
+  }
+
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="title">🎤 Live Speaker Diarization & Transcription</div>
+    <div class="mb-3">
+        <label for="language-select" class="form-label">🎯 Select Language</label>
+        <select id="language-select" class="form-select">
+          <option value="en-IN" selected>English (India)</option>
+          <option value="hi-IN">Hindi (India)</option>
+          <option value="ta-IN">Tamil (India)</option>
+          <option value="te-IN">Telugu (India)</option>
+          <option value="bn-IN">Bengali (India)</option>
+          <option value="gu-IN">Gujarati (India)</option>
+          <option value="kn-IN">Kannada (India)</option>
+          <option value="ml-IN">Malayalam (India)</option>
+          <option value="mr-IN">Marathi (India)</option>
+          <option value="pa-IN">Punjabi (India)</option>
+          <option value="ur-IN">Urdu (India)</option>
+        </select>
+      </div>
+      
+    <button onclick="startRecording()" class="btn btn-success">Start</button>
+    <button onclick="stopRecording()" class="btn btn-warning">Stop</button>
+    <button onclick="clearFiles()" class="btn btn-danger">Clear</button>
+    <button id="generate-summary-btn" class="btn btn-primary" onclick="getSummary()" disabled>
+      Generate Summary
+    </button>
+    
+
+    <!-- Alert placeholder -->
+    <div id="alert-box" class="mt-3"></div>
+
+    <!-- Transcript display -->
+    <div id="transcript-box" class="mt-4"></div>
+
+    <!-- Summary Section -->
+    <div class="mt-4">
+      <h5 class="text-secondary">📝 Summary</h5>
+      <div id="summary-box" class="summary-style"></div>
+    </div>
+
+    <!-- Key Points Section -->
+    <div class="mt-4">
+      <h5 class="text-secondary">📌 Key Points</h5>
+      <div id="keypoints-box" class="summary-style"></div>
+    </div>
+
+    <!-- Action Items Section -->
+    <div class="mt-4">
+      <h5 class="text-secondary">✅ Action Required</h5>
+      <div id="actions-box" class="summary-style"></div>
+    </div>
+  </div>
+  
+
+
+
+  <script>
+    function showAlert(message, type = 'success') {
+      const alertBox = document.getElementById('alert-box');
+      const alert = document.createElement('div');
+      alert.className = `alert alert-${type} alert-dismissible fade show`;
+      alert.role = 'alert';
+      alert.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+      `;
+      alertBox.appendChild(alert);
+
+      // Auto-dismiss after 3 seconds
+      setTimeout(() => {
+        alert.classList.remove('show');
+        alert.classList.add('hide');
+        setTimeout(() => alert.remove(), 500);
+      }, 3000);
+    }
+
+    function startRecording() {
+        const language = document.getElementById('language-select').value;
+        fetch(`/start-recording?lang=${language}`)
+            .then(res => res.json())
+            .then(data => {
+            console.log(data);
+            showAlert('🎙️ Recording started', 'success');
+            });
+        }
+
+
+        function stopRecording() {
+  fetch('/stop-recording')
+    .then(res => res.json())
+    .then(data => {
+      console.log(data);
+      showAlert('⏹️ Recording stopped', 'warning');
+
+      // Start polling for summary readiness
+      const checkSummaryReady = setInterval(() => {
+        fetch('/summary-ready')
+          .then(res => res.json())
+          .then(data => {
+            if (data.ready) {
+              clearInterval(checkSummaryReady);
+              document.getElementById('generate-summary-btn').disabled = false;
+              showAlert('✅ Final transcript processed. Summary is ready to generate.', 'info');
+            }
+          });
+      }, 3000);
+    });
+}
+
+
+function clearFiles() {
+  fetch('/clear', { method: 'POST' })
+    .then(response => response.json())
+    .then(data => {
+      console.log(data.message);
+      document.getElementById('transcript-box').innerHTML = '';
+      document.getElementById('summary-box').innerHTML = '';
+      document.getElementById('keypoints-box').innerHTML = '';
+      document.getElementById('actions-box').innerHTML = '';
+      document.getElementById('generate-summary-btn').disabled = true;
+    });
+}
+
+
+function updateTranscript() {
+  fetch('/get-transcript')
+    .then(response => response.json())
+    .then(data => {
+      let output = '';
+      data.forEach(entry => {
+        output += `🗣 ${entry.speaker}: ${entry.utterance}\n`;
+        if (entry.translation && entry.translation.trim() !== '') {
+          output += `📝 Translation: ${entry.translation}\n\n`;
+        } else {
+          output += `\n`;  // Add spacing if no translation
+        }
+      });
+      const box = document.getElementById('transcript-box');
+      box.innerText = output;
+      box.scrollTop = box.scrollHeight;
+    });
+}
+
+    setInterval(updateTranscript, 5000); // Poll every 5 seconds
+
+    function getSummary() {
+  const btn = document.getElementById('generate-summary-btn');
+  btn.disabled = true;
+  btn.innerText = "⏳ Generating...";
+
+  fetch('/get-summary')
+    .then(res => res.json())
+    .then(data => {
+      document.getElementById('summary-box').innerText = data.summary || '';
+      document.getElementById('keypoints-box').innerText = data.key_points || '';
+      document.getElementById('actions-box').innerText = data.actions || '';
+      showAlert('✅ Summary generated!', 'success');
+    })
+    .catch(() => {
+      showAlert('⚠️ Error generating summary', 'danger');
+    })
+    .finally(() => {
+      btn.disabled = false;
+      btn.innerText = " Generate Summary";
+    });
+}
+
+  </script>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
